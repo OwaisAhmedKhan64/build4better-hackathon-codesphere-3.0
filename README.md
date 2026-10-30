@@ -3,6 +3,11 @@ A repository for our project for Build4Better hackathon in CodeSphere 3.0. Team:
 
 ---
 
+## Deployments and Database
+Frontend: https://backend-blackmesa-build4better.onrender.com
+Backend: https://frontend-blackmesa-build4better.onrender.com
+Database: https://supabase.com/dashboard/project/dtdcmsncaftksemvbxjr
+
 ## Quickstart & Initialization Guide
 
 Follow the steps below to set up and run both the backend and frontend on your local machine.
