@@ -6,6 +6,7 @@ from app.schemas.note import NoteCreate
 router = APIRouter(tags=["System & Diagnostics"])
 
 @router.get("/health")
+@router.get("/api/system/health")
 def health_check():
     """Simple liveness probe for monitoring and deployments."""
     return {"status": "ok"}
