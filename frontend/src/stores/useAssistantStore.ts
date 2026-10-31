@@ -3,6 +3,10 @@ import { ref, computed, shallowRef } from 'vue'
 import type { Language, AssistantWorkflowState, ErrorCode, AssistResponse } from '@/types'
 import api from '@/api/client'
 
+// Named constants for small square Document Picture-in-Picture window
+export const PIP_WIDTH = 160
+export const PIP_HEIGHT = 160
+
 export const useAssistantStore = defineStore('assistant', () => {
     // 1. Core Language & Settings (Default: English)
     const language = ref<Language>('en')
@@ -94,6 +98,8 @@ export const useAssistantStore = defineStore('assistant', () => {
             reopenPip: 'Open Floating Window',
             pipShortScamTitle: 'Security Alert',
             pipShortScamNotice: 'Suspicious activity detected on screen. Do not tap unknown links or give OTPs.',
+            switchToUrdu: 'Switch to Urdu',
+            switchToEnglish: 'Switch to English',
         },
         ur: {
             brandName: 'آپ کا ڈیجیٹل ساتھی',
@@ -147,6 +153,8 @@ export const useAssistantStore = defineStore('assistant', () => {
             reopenPip: 'فلوٹنگ ونڈو کھولیں',
             pipShortScamTitle: 'حفاظتی انتباہ',
             pipShortScamNotice: 'اسکرین پر مشکوک مواد نظر آ رہا ہے۔ کسی لنک پر کلک نہ کریں اور OTP مت دیں۔',
+            switchToUrdu: 'اردو میں تبدیل کریں',
+            switchToEnglish: 'انگریزی میں تبدیل کریں',
         },
     }
 
@@ -161,8 +169,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     const isScreenSharing = computed(() => {
         return Boolean(
             displayStream.value &&
-                displayStream.value.active &&
-                displayStream.value.getVideoTracks().some((track) => track.readyState === 'live')
+            displayStream.value.active &&
+            displayStream.value.getVideoTracks().some((track) => track.readyState === 'live')
         )
     })
 
@@ -305,12 +313,22 @@ export const useAssistantStore = defineStore('assistant', () => {
         pipWin.document.title = currentAppName.value + ' - Floating Assistant'
         pipWin.document.documentElement.dir = language.value === 'ur' ? 'rtl' : 'ltr'
         pipWin.document.documentElement.lang = language.value
+        pipWin.document.documentElement.style.margin = '0'
+        pipWin.document.documentElement.style.padding = '0'
+        pipWin.document.documentElement.style.overflow = 'hidden'
+        pipWin.document.documentElement.style.height = '100%'
+
         pipWin.document.body.style.backgroundColor = '#F7F1E7'
         pipWin.document.body.style.color = '#3D2B20'
         pipWin.document.body.style.margin = '0'
-        pipWin.document.body.style.padding = '12px'
+        pipWin.document.body.style.padding = '0'
+        pipWin.document.body.style.width = '100vw'
+        pipWin.document.body.style.height = '100vh'
+        pipWin.document.body.style.display = 'flex'
+        pipWin.document.body.style.alignItems = 'center'
+        pipWin.document.body.style.justifyContent = 'center'
+        pipWin.document.body.style.overflow = 'hidden'
         pipWin.document.body.style.boxSizing = 'border-box'
-        pipWin.document.body.style.overflowX = 'hidden'
         pipWin.document.body.style.fontFamily =
             language.value === 'ur' ? "'Noto Nastaliq Urdu', serif" : "'Inter', sans-serif"
     }
@@ -327,16 +345,22 @@ export const useAssistantStore = defineStore('assistant', () => {
 
         try {
             const pipWin = await window.documentPictureInPicture.requestWindow({
-                width: 280,
-                height: 180,
+                width: PIP_WIDTH,
+                height: PIP_HEIGHT,
             })
 
             // Copy typography and stylesheets
             copyStylesToPip(pipWin)
 
-            // Create target mount element
+            // Create target mount element (centered, no overflow)
             const mountContainer = pipWin.document.createElement('div')
             mountContainer.id = 'pip-control-root'
+            mountContainer.style.display = 'flex'
+            mountContainer.style.alignItems = 'center'
+            mountContainer.style.justifyContent = 'center'
+            mountContainer.style.width = '100%'
+            mountContainer.style.height = '100%'
+            mountContainer.style.overflow = 'hidden'
             pipWin.document.body.appendChild(mountContainer)
 
             // Handle window close event (controls seamlessly return to the tab)
@@ -482,7 +506,7 @@ export const useAssistantStore = defineStore('assistant', () => {
     function repeatResponse() {
         if (audioPlayer.value) {
             audioPlayer.value.currentTime = 0
-            audioPlayer.value.play().catch(() => {})
+            audioPlayer.value.play().catch(() => { })
         } else if (audioBase64.value) {
             playAudio(audioBase64.value)
         } else if (typeof window !== 'undefined' && 'speechSynthesis' in window && aiResponse.value) {
@@ -676,7 +700,7 @@ export const useAssistantStore = defineStore('assistant', () => {
         if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
             try {
                 mediaRecorder.value.stop()
-            } catch {}
+            } catch { }
         }
         mediaRecorder.value = null
 
