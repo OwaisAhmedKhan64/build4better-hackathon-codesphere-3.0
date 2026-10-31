@@ -1,7 +1,7 @@
 import base64
 import traceback
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, Body, HTTPException, status
+from fastapi import APIRouter, Request, UploadFile, File, Form, Body, HTTPException, status
 from pydantic import BaseModel, Field
 from app.services.groq_service import transcribe_audio, analyze_screen_and_query
 from app.services.tts_service import synthesize_speech_base64
@@ -113,15 +113,47 @@ async def execute_assist_pipeline(image_bytes: bytes, audio_bytes: bytes, langua
     "",
     response_model=AssistResponse,
     status_code=status.HTTP_200_OK,
-    summary="Assist with Base64 JSON (Default Live Workflow)",
-    description="Main pipeline: Accepts base64 encoded image and voice audio. Returns sober guidance, error presence, and synthesized base64 MP3 speech."
+    summary="Multimodal Assist (JSON Base64 or FormData)",
+    description="Main pipeline: Accepts either JSON (base64 image/audio) or Multipart FormData (image/audio blobs). Returns sober guidance, error detection, and synthesized speech."
 )
-async def assist_json(payload: AssistJSONPayload = Body(...)):
-    """Receives JSON containing base64 image and base64 audio."""
+async def assist_endpoint(request: Request):
+    """
+    Dual-mode handler:
+    1. If Content-Type is application/json: decodes base64 image and audio.
+    2. If Content-Type is multipart/form-data: reads uploaded image and audio blobs.
+    """
     try:
-        image_bytes = decode_base64_data(payload.image)
-        audio_bytes = decode_base64_data(payload.audio)
-        return await execute_assist_pipeline(image_bytes, audio_bytes, payload.language)
+        content_type = request.headers.get("content-type", "")
+
+        if "application/json" in content_type:
+            body = await request.json()
+            image_raw = body.get("image") or body.get("image_base64") or ""
+            audio_raw = body.get("audio") or body.get("audio_base64") or ""
+            language = body.get("language") or "ur"
+
+            image_bytes = decode_base64_data(image_raw)
+            audio_bytes = decode_base64_data(audio_raw)
+        else:
+            form = await request.form()
+            img_field = form.get("image") or form.get("image_base64")
+            aud_field = form.get("audio") or form.get("audio_base64")
+            language = str(form.get("language") or "ur")
+
+            if hasattr(img_field, "read"):
+                image_bytes = await img_field.read()
+            elif isinstance(img_field, str):
+                image_bytes = decode_base64_data(img_field)
+            else:
+                image_bytes = b""
+
+            if hasattr(aud_field, "read"):
+                audio_bytes = await aud_field.read()
+            elif isinstance(aud_field, str):
+                audio_bytes = decode_base64_data(aud_field)
+            else:
+                audio_bytes = b""
+
+        return await execute_assist_pipeline(image_bytes, audio_bytes, language)
     except HTTPException:
         raise
     except Exception as err:
