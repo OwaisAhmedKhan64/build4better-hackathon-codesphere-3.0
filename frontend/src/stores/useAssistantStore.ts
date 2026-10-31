@@ -27,14 +27,20 @@ export const useAssistantStore = defineStore('assistant', () => {
     const audioChunks = ref<Blob[]>([])
     const audioPlayer = shallowRef<HTMLAudioElement | null>(null)
 
-    // 4. Conversation / Response Data (Only populated upon real backend response)
+    // 4. Document Picture-in-Picture Floating Window State
+    const pipWindow = shallowRef<Window | null>(null)
+    const isPipOpen = ref<boolean>(false)
+    const pipMountTarget = shallowRef<HTMLElement | null>(null)
+    const pipUnsupportedNotice = ref<boolean>(false)
+
+    // 5. Conversation / Response Data (Only populated upon real backend response)
     const transcript = ref<string>('')
     const aiResponse = ref<string>('')
     const suggestedAction = ref<string>('')
     const isScamWarning = ref<boolean>(false)
     const audioBase64 = ref<string | null>(null)
 
-    // 5. Complete Typed Translations (No external i18n package needed)
+    // 6. Complete Typed Translations (No external i18n package needed)
     const translations = {
         en: {
             brandName: 'Your Digital Companion',
@@ -81,6 +87,13 @@ export const useAssistantStore = defineStore('assistant', () => {
             hintReady: "Tap the button, then tell us what's confusing.",
             hintListening: "Speak naturally, then tap again when you're done.",
             hintProcessing: "Please wait a moment, we're looking at your screen.",
+            pipUnsupportedHint: 'For an always-on-top floating window, use Google Chrome or Microsoft Edge.',
+            pipSwitchHint: 'Switch to the page you need help with. The assistant stays on top.',
+            pipActiveHeading: 'Assistant is floating on your screen',
+            bringControlsBack: 'Return Controls to Tab',
+            reopenPip: 'Open Floating Window',
+            pipShortScamTitle: 'Security Alert',
+            pipShortScamNotice: 'Suspicious activity detected on screen. Do not tap unknown links or give OTPs.',
         },
         ur: {
             brandName: 'آپ کا ڈیجیٹل ساتھی',
@@ -127,6 +140,13 @@ export const useAssistantStore = defineStore('assistant', () => {
             hintReady: 'بٹن پر ٹیپ کریں، پھر بتائیں کہ آپ کو کیا سمجھ نہیں آ رہا۔',
             hintListening: 'آرام سے بولیں، اور بات مکمل ہونے پر دوبارہ ٹیپ کریں۔',
             hintProcessing: 'ایک لمحہ انتظار کریں، ہم آپ کی اسکرین دیکھ رہے ہیں۔',
+            pipUnsupportedHint: 'دیگر ٹیبز کے اوپر تیرتی ہوئی ونڈو کے لیے گوگل کروم یا مائیکروسافٹ ایج استعمال کریں۔',
+            pipSwitchHint: 'جس صفحے پر مدد درکار ہے وہاں جائیں۔ اسسٹنٹ اوپر ہی رہے گا۔',
+            pipActiveHeading: 'اسسٹنٹ آپ کی اسکرین کے اوپر موجود ہے',
+            bringControlsBack: 'کنٹرولز واپس ٹیب میں لائیں',
+            reopenPip: 'فلوٹنگ ونڈو کھولیں',
+            pipShortScamTitle: 'حفاظتی انتباہ',
+            pipShortScamNotice: 'اسکرین پر مشکوک مواد نظر آ رہا ہے۔ کسی لنک پر کلک نہ کریں اور OTP مت دیں۔',
         },
     }
 
@@ -221,17 +241,185 @@ export const useAssistantStore = defineStore('assistant', () => {
         }
     })
 
-    // Language switch with document direction update
+    // Language switch with document direction update (both main tab and PiP window)
     function setLanguage(lang: Language) {
         language.value = lang
         if (typeof document !== 'undefined') {
             document.documentElement.dir = lang === 'ur' ? 'rtl' : 'ltr'
             document.documentElement.lang = lang
         }
+        if (pipWindow.value && !pipWindow.value.closed) {
+            try {
+                pipWindow.value.document.documentElement.dir = lang === 'ur' ? 'rtl' : 'ltr'
+                pipWindow.value.document.documentElement.lang = lang
+                pipWindow.value.document.body.style.fontFamily =
+                    lang === 'ur' ? "'Noto Nastaliq Urdu', serif" : "'Inter', sans-serif"
+            } catch (e) {
+                console.warn('Could not update PiP window language direction:', e)
+            }
+        }
+    }
+
+    // Copy fonts, stylesheets, and base styling into PiP window
+    function copyStylesToPip(pipWin: Window) {
+        const head = pipWin.document.head
+
+        // 1. Copy Google Fonts and link tags
+        document.head.querySelectorAll('link[rel="stylesheet"], link[rel="preconnect"]').forEach((el) => {
+            head.appendChild(el.cloneNode(true))
+        })
+
+        // 2. Copy all document style sheets (Tailwind, app styles, etc.)
+        Array.from(document.styleSheets).forEach((sheet) => {
+            try {
+                if (sheet.href) {
+                    const link = pipWin.document.createElement('link')
+                    link.rel = 'stylesheet'
+                    link.href = sheet.href
+                    head.appendChild(link)
+                } else if (sheet.cssRules) {
+                    const style = pipWin.document.createElement('style')
+                    for (const rule of sheet.cssRules) {
+                        style.appendChild(pipWin.document.createTextNode(rule.cssText))
+                    }
+                    head.appendChild(style)
+                }
+            } catch {
+                if (sheet.href) {
+                    const link = pipWin.document.createElement('link')
+                    link.rel = 'stylesheet'
+                    link.href = sheet.href
+                    head.appendChild(link)
+                }
+            }
+        })
+
+        // 3. Copy any raw style tags from head
+        document.head.querySelectorAll('style').forEach((st) => {
+            const style = pipWin.document.createElement('style')
+            style.textContent = st.textContent
+            head.appendChild(style)
+        })
+
+        // 4. Set document attributes and base body styles
+        pipWin.document.title = currentAppName.value + ' - Floating Assistant'
+        pipWin.document.documentElement.dir = language.value === 'ur' ? 'rtl' : 'ltr'
+        pipWin.document.documentElement.lang = language.value
+        pipWin.document.body.style.backgroundColor = '#F7F1E7'
+        pipWin.document.body.style.color = '#3D2B20'
+        pipWin.document.body.style.margin = '0'
+        pipWin.document.body.style.padding = '12px'
+        pipWin.document.body.style.boxSizing = 'border-box'
+        pipWin.document.body.style.overflowX = 'hidden'
+        pipWin.document.body.style.fontFamily =
+            language.value === 'ur' ? "'Noto Nastaliq Urdu', serif" : "'Inter', sans-serif"
+    }
+
+    // Open Document Picture-in-Picture window
+    async function openPipWindow() {
+        if (!window.documentPictureInPicture || typeof window.documentPictureInPicture.requestWindow !== 'function') {
+            pipUnsupportedNotice.value = true
+            return
+        }
+
+        // Close existing PiP window if already open
+        closePipWindow()
+
+        try {
+            const pipWin = await window.documentPictureInPicture.requestWindow({
+                width: 340,
+                height: 440,
+            })
+
+            // Copy typography and stylesheets
+            copyStylesToPip(pipWin)
+
+            // Create target mount element
+            const mountContainer = pipWin.document.createElement('div')
+            mountContainer.id = 'pip-control-root'
+            pipWin.document.body.appendChild(mountContainer)
+
+            // Handle window close event (controls seamlessly return to the tab)
+            pipWin.addEventListener('pagehide', () => {
+                isPipOpen.value = false
+                pipMountTarget.value = null
+                pipWindow.value = null
+            })
+
+            pipWindow.value = pipWin
+            pipMountTarget.value = mountContainer
+            isPipOpen.value = true
+            pipUnsupportedNotice.value = false
+        } catch (err) {
+            console.warn('Failed to open Document Picture-in-Picture window:', err)
+            pipUnsupportedNotice.value = true
+            isPipOpen.value = false
+            pipMountTarget.value = null
+            pipWindow.value = null
+        }
+    }
+
+    // Close Document Picture-in-Picture window
+    function closePipWindow() {
+        if (pipWindow.value && !pipWindow.value.closed) {
+            try {
+                pipWindow.value.close()
+            } catch (e) {
+                console.warn('Error closing PiP window:', e)
+            }
+        }
+        pipWindow.value = null
+        pipMountTarget.value = null
+        isPipOpen.value = false
     }
 
     // Helper: Capture a single keyframe snapshot from the screen stream
+    // Uses ImageCapture(track).grabFrame() to prevent background tab freezing, with <video> fallback.
     async function captureScreenFrame(stream: MediaStream): Promise<Blob> {
+        const videoTrack = stream.getVideoTracks()[0]
+        if (!videoTrack) {
+            throw new Error('No video track available in screen stream')
+        }
+
+        // 1. Primary approach: ImageCapture(track).grabFrame() directly from track
+        if (typeof (window as any).ImageCapture === 'function') {
+            try {
+                const imageCapture = new (window as any).ImageCapture(videoTrack)
+                const bitmap: ImageBitmap = await imageCapture.grabFrame()
+
+                let width = bitmap.width
+                let height = bitmap.height
+                if (width > 1280) {
+                    height = Math.round((height * 1280) / width)
+                    width = 1280
+                }
+
+                const canvas = document.createElement('canvas')
+                canvas.width = width
+                canvas.height = height
+                const ctx = canvas.getContext('2d')
+                if (ctx) {
+                    ctx.drawImage(bitmap, 0, 0, width, height)
+                }
+
+                bitmap.close?.()
+
+                return await new Promise<Blob>((resolve, reject) => {
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) resolve(blob)
+                            else reject(new Error('Failed to create frame blob from ImageBitmap'))
+                        },
+                        'image/jpeg',
+                        0.85
+                    )
+                })
+            } catch (err) {
+                console.warn('ImageCapture.grabFrame failed, falling back to video element:', err)
+            }
+        }
+
+        // 2. Fallback: offscreen <video> + <canvas>
         return new Promise(async (resolve, reject) => {
             try {
                 const video = document.createElement('video')
@@ -240,15 +428,22 @@ export const useAssistantStore = defineStore('assistant', () => {
                 video.playsInline = true
                 await video.play()
 
-                // Allow 100ms for video frame rendering
+                // Allow 120ms for video frame rendering
                 await new Promise((r) => setTimeout(r, 120))
 
+                let width = video.videoWidth || 1280
+                let height = video.videoHeight || 720
+                if (width > 1280) {
+                    height = Math.round((height * 1280) / width)
+                    width = 1280
+                }
+
                 const canvas = document.createElement('canvas')
-                canvas.width = video.videoWidth || 1280
-                canvas.height = video.videoHeight || 720
+                canvas.width = width
+                canvas.height = height
                 const ctx = canvas.getContext('2d')
                 if (ctx) {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                    ctx.drawImage(video, 0, 0, width, height)
                 }
 
                 video.pause()
@@ -309,7 +504,7 @@ export const useAssistantStore = defineStore('assistant', () => {
         }
     }
 
-    // Workflow Step 1: Start Assistant & Request Permissions
+    // Workflow Step 1: Start Assistant, Request Permissions, and Open PiP
     async function startAssistantWorkflow() {
         errorCode.value = null
         workflowState.value = 'requesting_permissions'
@@ -346,6 +541,9 @@ export const useAssistantStore = defineStore('assistant', () => {
             micStream.value = mic
 
             workflowState.value = 'ready'
+
+            // 3. Open Document Picture-in-Picture floating window
+            await openPipWindow()
         } catch (err: any) {
             stopAssistant()
             workflowState.value = 'idle'
@@ -399,7 +597,7 @@ export const useAssistantStore = defineStore('assistant', () => {
                     throw new Error('Screen stream not active')
                 }
 
-                // Capture one sharp screenshot from display stream
+                // Capture one sharp screenshot from display stream (ImageCapture / Video fallback)
                 const imageBlob = await captureScreenFrame(displayStream.value)
 
                 // Build Multipart Form Data
@@ -465,14 +663,16 @@ export const useAssistantStore = defineStore('assistant', () => {
         workflowState.value = 'ready'
     }
 
-    // Screen sharing stopped by user
+    // Screen sharing stopped by user (browser toolbar)
     function handleScreenShareEnded() {
         stopAssistant()
         errorCode.value = 'screen_stopped'
     }
 
-    // Stop Assistant and release all tracks/resources
+    // Stop Assistant and release all tracks/resources and close PiP
     function stopAssistant() {
+        closePipWindow()
+
         if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
             try {
                 mediaRecorder.value.stop()
@@ -508,6 +708,10 @@ export const useAssistantStore = defineStore('assistant', () => {
         errorMessage,
         isBackendReachable,
         isScreenSharing,
+        pipWindow,
+        isPipOpen,
+        pipMountTarget,
+        pipUnsupportedNotice,
         transcript,
         aiResponse,
         suggestedAction,
@@ -531,5 +735,7 @@ export const useAssistantStore = defineStore('assistant', () => {
         askAnother,
         stopAssistant,
         checkBackendHealth,
+        openPipWindow,
+        closePipWindow,
     }
 })

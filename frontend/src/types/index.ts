@@ -39,3 +39,26 @@ export interface AssistResponse {
     is_scam_warning: boolean
     suggested_action?: string
 }
+
+// Document Picture-in-Picture API TypeScript Declarations
+export interface DocumentPictureInPictureOptions {
+    width?: number
+    height?: number
+    disallowReturnToOpener?: boolean
+}
+
+export interface DocumentPictureInPictureEvent extends Event {
+    window: Window
+}
+
+export interface DocumentPictureInPicture extends EventTarget {
+    window: Window | null
+    requestWindow(options?: DocumentPictureInPictureOptions): Promise<Window>
+    onenter?: (event: DocumentPictureInPictureEvent) => void
+}
+
+declare global {
+    interface Window {
+        documentPictureInPicture?: DocumentPictureInPicture
+    }
+}
