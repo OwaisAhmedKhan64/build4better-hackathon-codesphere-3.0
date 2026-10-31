@@ -327,8 +327,8 @@ export const useAssistantStore = defineStore('assistant', () => {
 
         try {
             const pipWin = await window.documentPictureInPicture.requestWindow({
-                width: 340,
-                height: 440,
+                width: 280,
+                height: 180,
             })
 
             // Copy typography and stylesheets
