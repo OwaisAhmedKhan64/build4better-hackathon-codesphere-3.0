@@ -1,1 +1,65 @@
 @import "tailwindcss";
+
+:root {
+  --color-warm-cream: #F7F1E7;
+  --color-ivory: #FFFDF8;
+  --color-choc-brown: #76543D;
+  --color-deep-brown: #3D2B20;
+  --color-muted-sage: #A7AD91;
+  --color-status-sage: #7F8A68;
+  --color-soft-rose: #F3DADA;
+  --urdu-scale: 1.05;
+}
+
+body {
+  background-color: #F7F1E7;
+  color: #3D2B20;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography styles */
+.font-fraunces {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.font-inter {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Consistent Urdu typography scaling rule: 1.05x size, ~2.0 line-height */
+.font-urdu,
+html[dir="rtl"] .font-urdu,
+[dir="rtl"] .font-urdu {
+  font-family: 'Noto Nastaliq Urdu', -apple-system, serif !important;
+  font-size: 1.05em;
+  line-height: 2.0 !important;
+  letter-spacing: normal !important;
+  text-decoration: none !important;
+  font-style: normal !important;
+}
+
+/* Global RTL resets: No italics, no letter-spacing, no squiggles in Urdu mode */
+[dir="rtl"] * {
+  letter-spacing: normal !important;
+  font-style: normal !important;
+}
+
+/* Subtle concentric pulse animation for microphone button only while listening */
+@keyframes concentric-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(118, 84, 61, 0.35);
+  }
+  65% {
+    box-shadow: 0 0 0 24px rgba(118, 84, 61, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(118, 84, 61, 0);
+  }
+}
+
+.pulse-listening {
+  animation: concentric-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
