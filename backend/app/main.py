@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routers import system, notes
+from app.routers import system, notes, assist, tts
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -30,3 +30,5 @@ def read_root():
 
 app.include_router(system.router)
 app.include_router(notes.router)
+app.include_router(assist.router)
+app.include_router(tts.router)
